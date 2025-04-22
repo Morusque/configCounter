@@ -11,8 +11,11 @@ ArrayList<Note> notes = new ArrayList<Note>();
 int[] pitchClass = new int[12];
 
 int[] configsCount = new int[57];
+int[] sureConfigsCount = new int[57];
 
 ArrayList<Chord> chords = new ArrayList<Chord>();
+
+int[] numberOfConfigs = new int[57];
 
 void setup() {
   size(400, 400);
@@ -31,6 +34,7 @@ void setup() {
       files.add(file.getAbsolutePath());
     }
   }
+  for (int i=0;i<numberOfConfigs.length;i++) numberOfConfigs[i]=0;
   // Process all MIDI file found in the data folder
   for (String file : files) {
     println("Processing: " + file);
@@ -45,10 +49,18 @@ void setup() {
   // print the configuration modes count
   println("Configuration modes count:");
   for (int i=0; i<configsCount.length; i++) {
-    print(nf(i, 2)+" : "+configsCount[i]+" | ");
-    if (i % 6 == 5) println("");
+    println(nf(i, 2)+" : "+configsCount[i]);
   }
-  println("");
+  // print the sure configuration modes count
+  println("Sure configuration modes count:");
+  for (int i=0; i<sureConfigsCount.length; i++) {
+    println(nf(i, 2)+" : "+sureConfigsCount[i]);
+  }
+  // print the number of configurations found
+  println("Number of configurations found:");
+  for (int i=0; i<numberOfConfigs.length; i++) {
+    println(nf(i, 2)+" : "+numberOfConfigs[i]);
+  }
   exit();
 }
 
@@ -121,14 +133,20 @@ void countValidConfigs() {
 
   for (int i = 0; i < chords.size(); i++) {
     Chord chord = (Chord) chords.get(i);
-
-    if (chord.notes.size() > 1) {
-      for (int n = 0; n < 57; n++) {
-        if (chord.possibleModes[n]) {
-          configsCount[n]++;
+    int configsFound = 0;
+    for (int n = 0; n < 57; n++) {
+      if (chord.possibleModes[n]) {
+        configsCount[n]++;
+        // count number of true values in this config
+        int notesInConfig = 0;
+        for (int j = 0; j < 12 ; j++) if (classicalModes[n][j]) notesInConfig++;
+        if (chord.numberOfPitchClassesPresent == notesInConfig) {
+          sureConfigsCount[n]++;
         }
+        configsFound++;
       }
     }
+    numberOfConfigs[configsFound]++;
   }
 
 }

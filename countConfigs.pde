@@ -4,12 +4,15 @@
 import javax.sound.midi.*;
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
 
 ArrayList<Note> notes = new ArrayList<Note>();
 
 int[] pitchClass = new int[12];
 
 int[] configsCount = new int[57];
+
+ArrayList<Chord> chords = new ArrayList<Chord>();
 
 void setup() {
   size(400, 400);
@@ -32,14 +35,102 @@ void setup() {
   for (String file : files) {
     println("Processing: " + file);
     notes.clear();
+    chords.clear();
     processMidiFile(new File(file));
     // count cumulative pitch classes and configurations
     count();
+    buildChordsFromNotes();
+    countValidConfigs();
   }
+  // print the configuration modes count
+  println("Configuration modes count:");
+  for (int i=0; i<configsCount.length; i++) {
+    print(nf(i, 2)+" : "+configsCount[i]+" | ");
+    if (i % 6 == 5) println("");
+  }
+  println("");
   exit();
 }
 
 void draw() {
+}
+
+void buildChordsFromNotes() {
+  ArrayList events = new ArrayList();
+
+  // Crée les événements de début et de fin
+  for (int i = 0; i < notes.size(); i++) {
+    Note n = (Note) notes.get(i);
+    if (n.channel ==10) { // Ignore channel 10 (drums)
+      continue;
+    }
+    events.add(new Event(n.startTick, true, n));
+    events.add(new Event(n.stopTick, false, n));
+  }
+
+  // Tri manuel des événements (tri à bulles pour compatibilité maximale)
+  for (int i = 0; i < events.size(); i++) {
+    for (int j = i + 1; j < events.size(); j++) {
+      Event ei = (Event) events.get(i);
+      Event ej = (Event) events.get(j);
+      if (ej.time < ei.time) {
+        events.set(i, ej);
+        events.set(j, ei);
+      }
+    }
+  }
+
+  ArrayList activeNotes = new ArrayList();
+  float lastTime = -1;
+
+  for (int i = 0; i < events.size(); i++) {
+    Event e = (Event) events.get(i);
+
+    if (e.time != lastTime && activeNotes.size() > 0) {
+      Chord chord = new Chord();
+      for (int j = 0; j < activeNotes.size(); j++) {
+        chord.addNote((Note) activeNotes.get(j));
+      }
+      chords.add(chord);
+    }
+
+    if (e.isNoteOn) {
+      if (!activeNotes.contains(e.note)) activeNotes.add(e.note);
+    } else {
+      activeNotes.remove(e.note);
+    }
+
+    lastTime = e.time;
+  }
+}
+
+// Classe Event
+class Event {
+  float time;
+  boolean isNoteOn;
+  Note note;
+
+  Event(float time, boolean isNoteOn, Note note) {
+    this.time = time;
+    this.isNoteOn = isNoteOn;
+    this.note = note;
+  }
+}
+
+void countValidConfigs() {
+
+  for (int i = 0; i < chords.size(); i++) {
+    Chord chord = (Chord) chords.get(i);
+
+    if (chord.notes.size() > 1) {
+      for (int n = 0; n < 57; n++) {
+        if (chord.possibleModes[n]) {
+          configsCount[n]++;
+        }
+      }
+    }
+  }
+
 }
 
 void count() {
@@ -54,58 +145,40 @@ void count() {
   for (int i = 0; i < pitchClass.length; i++) {
     println("Pitch class " + i + ": " + pitchClass[i]);
   }
+}
+
+class Chord {
+  ArrayList<Note> notes = new ArrayList<Note>();
   boolean[] possibleModes = new boolean[57];
-  for (int i=0; i< possibleModes.length; i++) possibleModes[i] = true;
-  // go through the notes chronologically
-  for (int i = 0; i < notes.size(); i++) {
-    Note note = notes.get(i);
-    if (note.channel == 10) { // Ignore channel 10 (drums)
-      continue;
+  int[] pitchClasses = new int[12];
+  int numberOfPitchClassesPresent = 0;
+
+  Chord() {
+    for (int i=0; i< possibleModes.length; i++) possibleModes[i] = true;
+    for (int i=0; i< pitchClasses.length; i++) pitchClasses[i] = 0;
+  }
+
+  void addNote(Note note) {
+    // add the note to the chord
+    notes.add(note);
+
+    // add note to pitchClasses
+    int pitch = note.note % 12; // Get the pitch class (0-11)
+    if (pitchClasses[pitch] == 0) {
+      numberOfPitchClassesPresent++;
     }
-    // go through all the modes
-    boolean[] nextPossibleModes = new boolean[57];// possible modes including the next note
-    boolean[] newPossibleModes = new boolean[57];// possible modes cleared and starting from the next note
-    for (int k = 0; k < 57; k++) nextPossibleModes[k] = possibleModes[k];
-    for (int k = 0; k < 57; k++) newPossibleModes[k] = true;
+    pitchClasses[pitch]++;
+
+    // check if the note is in the mode
     for (int j = 0; j < classicalModes.length; j++) {
       if (possibleModes[j]) {
-        // check if the note is in the mode
         if (!classicalModes[j][note.note % 12]) {
           // this mode is not possible anymore
-          nextPossibleModes[j] = false;
-          newPossibleModes[j] = false;
+          possibleModes[j] = false;
         }
       }
     }
-    int numberOfPossibleModes = 0;
-    for (int j = 0; j < nextPossibleModes.length; j++) {
-      if (nextPossibleModes[j]) numberOfPossibleModes++;
-    }
-    // if there is still at least one possible mode in the new list, copy the new list into the actual list
-    if (numberOfPossibleModes > 0) {
-        possibleModes = nextPossibleModes;
-    } else {
-      // if there is no possible mode anymore, add the last possible modes to the count
-      for (int j = 0; j < possibleModes.length; j++) {
-        if (possibleModes[j]) configsCount[j]++;
-      }
-      // reset the list to the current state
-      possibleModes = newPossibleModes;
-    }
-    // if it's the last note of the track, add the last possible modes to the count
-    if (i == notes.size() - 1) {
-      for (int j = 0; j < possibleModes.length; j++) {
-        if (possibleModes[j]) configsCount[j]++;
-      }
-    }
   }
-  // print the configuration modes count
-  println("Configuration modes count:");
-  for (int i=0; i<configsCount.length; i++) {
-    print(nf(i, 2)+" : "+configsCount[i]+" | ");
-    if (i % 6 == 5) println("");
-  }
-  println("");
 }
 
 void processMidiFile(File midiFile) {
@@ -231,7 +304,7 @@ boolean[][] classicalModes = new boolean[][]{
   {false, false, true, true, false, true, true, false, true, false, true, true},
   {false, true, true, false, true, true, false, true, false, true, true, false},
   {true, true, false, true, true, false, true, false, true, true, false, false},
-  
+
   // Augmented Scale
   {true, false, false, true, true, false, false, true, true, false, false, true},
   {false, false, true, true, false, false, true, true, false, false, true, true},

@@ -17,6 +17,8 @@ ArrayList<Chord> chords = new ArrayList<Chord>();
 
 int[] numberOfConfigs = new int[57];
 
+int[] numberOfSimultaneousPitchClasses = new int[13];
+
 void setup() {
   size(400, 400);
   ArrayList<String> files = new ArrayList<String>();
@@ -35,6 +37,7 @@ void setup() {
     }
   }
   for (int i=0;i<numberOfConfigs.length;i++) numberOfConfigs[i]=0;
+  for (int i=0;i<numberOfSimultaneousPitchClasses.length;i++) numberOfSimultaneousPitchClasses[i]=0;
   // Process all MIDI file found in the data folder
   for (String file : files) {
     println("Processing: " + file);
@@ -44,8 +47,15 @@ void setup() {
     // count cumulative pitch classes and configurations
     count();
     buildChordsFromNotes();
+    // populate numberOfSimultaneousPitchClasses based on chords
+    for (int i=0;i<chords.size();i++) numberOfSimultaneousPitchClasses[chords.get(i).numberOfPitchClassesPresent]++;
     countValidConfigs();
   }
+  // print the number of simultaneous pitch classes
+  println("Simultaneous pitch classes:");
+  for (int i=0; i<numberOfSimultaneousPitchClasses.length; i++) {
+    println(nf(i, 2)+" : "+numberOfSimultaneousPitchClasses[i]);
+  }  
   // print the configuration modes count
   println("Configuration modes count:");
   for (int i=0; i<configsCount.length; i++) {

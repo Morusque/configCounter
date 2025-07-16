@@ -18,6 +18,7 @@ ArrayList<Chord> chords = new ArrayList<Chord>();
 int[] numberOfConfigs = new int[57];
 
 int[] numberOfCombinedConfigs = new int[57];
+int[] numberOfSureCombinedConfigs = new int[57];
 
 int[] numberOfSimultaneousPitchClasses = new int[13];
 
@@ -40,6 +41,7 @@ void setup() {
   }
   for (int i=0;i<numberOfConfigs.length;i++) numberOfConfigs[i]=0;
   for (int i=0;i<numberOfCombinedConfigs.length;i++) numberOfCombinedConfigs[i]=0;
+  for (int i=0;i<numberOfSureCombinedConfigs.length;i++) numberOfSureCombinedConfigs[i]=0;
   for (int i=0;i<numberOfSimultaneousPitchClasses.length;i++) numberOfSimultaneousPitchClasses[i]=0;
   // Process all MIDI file found in the data folder
   for (String file : files) {
@@ -76,9 +78,13 @@ void setup() {
     println(nf(i, 2)+" : "+numberOfConfigs[i]);
   }
   // print the number of configurations found
-  println("Number of sure combined configurations found:");
+  println("Number of combined configurations found:");
   for (int i=0; i<numberOfCombinedConfigs.length; i++) {
     println(nf(i, 2)+" : "+numberOfCombinedConfigs[i]);
+  }
+  println("Number of sure combined configurations found:");
+  for (int i=0; i<numberOfSureCombinedConfigs.length; i++) {
+    println(nf(i, 2)+" : "+numberOfSureCombinedConfigs[i]);
   }
   exit();
 }
@@ -176,53 +182,60 @@ void countValidConfigs() {
 void countCombinedConfigs() {
   int N = chords.size();
   int[] dp = new int[N + 1]; // min number of segments from i to end
-  int[] bestConfig = new int[N]; // config chosen at i
-  int[] nextBreak = new int[N]; // where to go next
+  int[] nextBreak = new int[N]; // where to go next in optimal path
+  boolean[][] combinedCache = new boolean[N][12]; // store the union of chords[i..j]
 
-  for (int i = N; i >= 0; i--) {
-    dp[i] = Integer.MAX_VALUE;
-  }
-  dp[N] = 0; // base case
+  for (int i = 0; i <= N; i++) dp[i] = Integer.MAX_VALUE;
+  dp[N] = 0;
 
-  // compute optimal segmentation from end to start
+  // process from end to start
   for (int i = N - 1; i >= 0; i--) {
-    boolean[] combinedNotes = new boolean[12];
-    for (int k = 0; k < 12; k++) combinedNotes[k] = false;
+    boolean[] combined = new boolean[12];
+    for (int k = 0; k < 12; k++) combined[k] = false;
 
     for (int j = i + 1; j <= N; j++) {
-      // add chord[j - 1] to combination
+      // combine chords i to j-1
       for (int k = 0; k < 12; k++) {
-        combinedNotes[k] = combinedNotes[k] || chords.get(j - 1).pitchClasses[k] > 0;
+        combined[k] = combined[k] || chords.get(j - 1).pitchClasses[k] > 0;
       }
 
-      // check if compatible
+      // check compatibility
       boolean compatible = false;
       for (int m = 0; m < 57; m++) {
-        if (isCompatible(combinedNotes, classicalModes[m])) {
+        if (isCompatible(combined, classicalModes[m])) {
           compatible = true;
           break;
         }
       }
-      if (!compatible) break; // no point continuing
 
-      // if exact match, see if this gives a better segmentation
-      for (int m = 0; m < 57; m++) {
-        if (isSame(combinedNotes, classicalModes[m])) {
-          if (dp[j] + 1 < dp[i]) {
-            dp[i] = dp[j] + 1;
-            bestConfig[i] = m;
-            nextBreak[i] = j;
-          }
+      if (!compatible) break; // stop here
+
+      // if segment [i..j-1] is valid, try using it
+      if (dp[j] + 1 < dp[i]) {
+        dp[i] = dp[j] + 1;
+        nextBreak[i] = j;
+        // clone combined notes for later analysis
+        for (int k = 0; k < 12; k++) {
+          combinedCache[i][k] = combined[k];
         }
       }
     }
   }
 
-  // count selected configs based on optimal path
+  // follow optimal path and count matching modes
   int i = 0;
   while (i < N && nextBreak[i] > i) {
-    int config = bestConfig[i];
-    numberOfCombinedConfigs[config]++;
+    boolean[] combined = combinedCache[i];
+
+    for (int m = 0; m < 57; m++) {
+      if (isCompatible(combined, classicalModes[m])) {
+        numberOfCombinedConfigs[m]++;
+        if (isSame(combined, classicalModes[m])) {
+          numberOfSureCombinedConfigs[m]++;
+        }
+      }
+    }
+
     i = nextBreak[i];
   }
 }

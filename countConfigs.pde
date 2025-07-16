@@ -17,6 +17,8 @@ ArrayList<Chord> chords = new ArrayList<Chord>();
 
 int[] numberOfConfigs = new int[57];
 
+int[] numberOfCombinedConfigs = new int[57];
+
 int[] numberOfSimultaneousPitchClasses = new int[13];
 
 void setup() {
@@ -37,6 +39,7 @@ void setup() {
     }
   }
   for (int i=0;i<numberOfConfigs.length;i++) numberOfConfigs[i]=0;
+  for (int i=0;i<numberOfCombinedConfigs.length;i++) numberOfCombinedConfigs[i]=0;
   for (int i=0;i<numberOfSimultaneousPitchClasses.length;i++) numberOfSimultaneousPitchClasses[i]=0;
   // Process all MIDI file found in the data folder
   for (String file : files) {
@@ -50,6 +53,7 @@ void setup() {
     // populate numberOfSimultaneousPitchClasses based on chords
     for (int i=0;i<chords.size();i++) numberOfSimultaneousPitchClasses[chords.get(i).numberOfPitchClassesPresent]++;
     countValidConfigs();
+    countCombinedConfigs();
   }
   // print the number of simultaneous pitch classes
   println("Simultaneous pitch classes:");
@@ -70,6 +74,11 @@ void setup() {
   println("Number of configurations found:");
   for (int i=0; i<numberOfConfigs.length; i++) {
     println(nf(i, 2)+" : "+numberOfConfigs[i]);
+  }
+  // print the number of configurations found
+  println("Number of sure combined configurations found:");
+  for (int i=0; i<numberOfCombinedConfigs.length; i++) {
+    println(nf(i, 2)+" : "+numberOfCombinedConfigs[i]);
   }
   exit();
 }
@@ -152,6 +161,9 @@ void countValidConfigs() {
         for (int j = 0; j < 12 ; j++) if (classicalModes[n][j]) notesInConfig++;
         if (chord.numberOfPitchClassesPresent == notesInConfig) {
           sureConfigsCount[n]++;
+          if (n==42) {
+            println("42 HERE ! chord : "+i+" / "+chords.size());
+          }
         }
         configsFound++;
       }
@@ -159,6 +171,70 @@ void countValidConfigs() {
     numberOfConfigs[configsFound]++;
   }
 
+}
+
+void countCombinedConfigs() {
+  int N = chords.size();
+  int[] dp = new int[N + 1]; // min number of segments from i to end
+  int[] bestConfig = new int[N]; // config chosen at i
+  int[] nextBreak = new int[N]; // where to go next
+
+  for (int i = N; i >= 0; i--) {
+    dp[i] = Integer.MAX_VALUE;
+  }
+  dp[N] = 0; // base case
+
+  // compute optimal segmentation from end to start
+  for (int i = N - 1; i >= 0; i--) {
+    boolean[] combinedNotes = new boolean[12];
+    for (int k = 0; k < 12; k++) combinedNotes[k] = false;
+
+    for (int j = i + 1; j <= N; j++) {
+      // add chord[j - 1] to combination
+      for (int k = 0; k < 12; k++) {
+        combinedNotes[k] = combinedNotes[k] || chords.get(j - 1).pitchClasses[k] > 0;
+      }
+
+      // check if compatible
+      boolean compatible = false;
+      for (int m = 0; m < 57; m++) {
+        if (isCompatible(combinedNotes, classicalModes[m])) {
+          compatible = true;
+          break;
+        }
+      }
+      if (!compatible) break; // no point continuing
+
+      // if exact match, see if this gives a better segmentation
+      for (int m = 0; m < 57; m++) {
+        if (isSame(combinedNotes, classicalModes[m])) {
+          if (dp[j] + 1 < dp[i]) {
+            dp[i] = dp[j] + 1;
+            bestConfig[i] = m;
+            nextBreak[i] = j;
+          }
+        }
+      }
+    }
+  }
+
+  // count selected configs based on optimal path
+  int i = 0;
+  while (i < N && nextBreak[i] > i) {
+    int config = bestConfig[i];
+    numberOfCombinedConfigs[config]++;
+    i = nextBreak[i];
+  }
+}
+
+boolean isSame(boolean[] chord, boolean[] mode) {
+  for (int i=0;i<chord.length;i++) if (chord[i]!=mode[i]) return false;
+  return true;
+}
+
+boolean isCompatible(boolean[] chord, boolean[] mode) {
+  for (int i=0;i<chord.length;i++) if (chord[i]) if (!mode[i]) return false;
+  return true;
 }
 
 void count() {
@@ -170,9 +246,11 @@ void count() {
     int pitch = note.note % 12; // Get the pitch class (0-11)
     pitchClass[pitch]++;
   }
+  /*
   for (int i = 0; i < pitchClass.length; i++) {
     println("Pitch class " + i + ": " + pitchClass[i]);
   }
+  */
 }
 
 class Chord {

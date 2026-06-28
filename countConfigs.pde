@@ -26,7 +26,7 @@ void setup() {
   size(400, 400);
   ArrayList<String> files = new ArrayList<String>();
   // add all files from dataPath() including subfolders
-  File[] filesArray = new File(dataPath("")).listFiles();
+  File[] filesArray = new File(dataPath(".")).listFiles();
   for (File file : filesArray) {
     if (file.isDirectory()) {
       File[] subFiles = file.listFiles();
@@ -167,16 +167,26 @@ void countValidConfigs() {
         for (int j = 0; j < 12 ; j++) if (classicalModes[n][j]) notesInConfig++;
         if (chord.numberOfPitchClassesPresent == notesInConfig) {
           sureConfigsCount[n]++;
-          if (n==42) {
-            println("42 HERE ! chord : "+i+" / "+chords.size());
-          }
         }
         configsFound++;
       }
     }
     numberOfConfigs[configsFound]++;
   }
+}
 
+String toReadableNote(int midiNote) {
+  String[] names = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+  int pitchClass = midiNote % 12;
+  int octave = (midiNote / 12) - 1;
+  return names[pitchClass] + octave;
+}
+
+void logChordMidiData(Chord chord) {
+  println("Chord MIDI data:");
+  for (Note note : chord.notes) {
+    println("Note: " + note.note + ", StartTick: " + note.startTick + ", StopTick: " + note.stopTick + ", Velocity: " + note.velocity + ", Channel: " + note.channel);
+  }
 }
 
 void countCombinedConfigs() {
@@ -366,6 +376,17 @@ class Note {
   }
 }
 
+void describeChordTiming(Chord chord) {
+  print("Bar (assuming 4/4)");
+  for (Note note : chord.notes) {
+    int tick = note.startTick;
+    int bar = tick / 1920;// assuming 4/4 time
+    print((bar + 1)+" ");
+  }
+  println();
+}
+
+
 boolean[][] classicalModes = new boolean[][]{
 
   // Major Scale
@@ -439,3 +460,49 @@ boolean[][] classicalModes = new boolean[][]{
   {true, false, true, false, true, false, true, false, true, false, true, false},
   {false, true, false, true, false, true, false, true, false, true, false, true}
 };
+
+
+
+
+
+
+
+void exportChordsMatching42(String originalPath, ArrayList<Chord> chords) {
+  try {
+    Sequence seq = new Sequence(Sequence.PPQ, 480);
+    Track track = seq.createTrack();
+
+    for (Chord chord : chords) {
+      if (!isCompatible(toBooleanArray(chord.pitchClasses), classicalModes[42])) continue;
+      if (!isSame(toBooleanArray(chord.pitchClasses), classicalModes[42])) continue;
+
+      for (Note note : chord.notes) {
+        if (note.stopTick <= note.startTick) continue;
+
+        ShortMessage on = new ShortMessage();
+        on.setMessage(ShortMessage.NOTE_ON, note.channel, note.note, note.velocity);
+        track.add(new MidiEvent(on, note.startTick));
+
+        ShortMessage off = new ShortMessage();
+        off.setMessage(ShortMessage.NOTE_OFF, note.channel, note.note, 0);
+        track.add(new MidiEvent(off, note.stopTick));
+      }
+    }
+
+    String exportPath = originalPath.replace(".mid", "_only42.mid");
+    File outFile = new File(exportPath);
+    MidiSystem.write(seq, 1, outFile);
+    println("Exported 42-only MIDI: " + exportPath);
+
+  } catch (Exception e) {
+    e.printStackTrace();
+  }
+}
+
+boolean[] toBooleanArray(int[] pitchClasses) {
+  boolean[] result = new boolean[12];
+  for (int i = 0; i < 12; i++) {
+    result[i] = pitchClasses[i] > 0;
+  }
+  return result;
+}

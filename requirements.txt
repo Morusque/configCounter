@@ -1,0 +1,3 @@
+# Modal analysis pipeline dependencies.
+# Install with:  py -3.12 -m pip install -r requirements.txt
+mido>=1.3
